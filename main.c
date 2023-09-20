@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include "datastructures.h"
 
 
 
@@ -21,7 +22,8 @@ typedef enum content_type_s{
   APPLICATION_XML,
   APPLICATION_PDF,
   APPLICATION_ZIP,
-  APPLICATION_OCTET_STREAM
+  APPLICATION_OCTET_STREAM,
+  CONTENT_TYPE_NOT_FOUND,
 } content_type_t;
 
 typedef enum request_method_s{
@@ -33,7 +35,8 @@ typedef enum request_method_s{
   OPTIONS,
   CONNECT,
   TRACE,
-  PATCH
+  PATCH,
+  METHOD_NOT_ALLOWED
 } request_method_t;
 
 request_method_t parse_method(char* method){
@@ -56,7 +59,7 @@ request_method_t parse_method(char* method){
   }else if(strcmp(method, "PATCH") == 0){
     return PATCH;
   }
-  return -1;
+  return METHOD_NOT_ALLOWED;
 }
 const char* get_content_type_str(content_type_t content_type){
   switch(content_type){
@@ -86,6 +89,8 @@ const char* get_content_type_str(content_type_t content_type){
       return "application/zip";
     case(APPLICATION_OCTET_STREAM):
       return "application/octet-stream";
+    case(CONTENT_TYPE_NOT_FOUND):
+      return "text/html";
   }
   return "text/html";
 }
@@ -190,23 +195,9 @@ content_type_t parse_content_type(char* content_type){
   }else if(strcmp(content_type, "application/octet-stream") == 0){
     return APPLICATION_OCTET_STREAM;
   }
-  return -1;
+  return CONTENT_TYPE_NOT_FOUND;
 }
 
-const int str_hash(const char*  str){
-  int hash = 0;
-  int i;
-  int len = strlen(str);
-  for(i = 0; i < len; i++){
-    hash += str[i];
-  }
-  for(i = 0; i < len; i+=2){
-    if(i + 1 < len){
-      hash *= str[i] * str[i + 1];
-    }
-  }
-  return hash;
-}
 
 
 typedef struct request_s{
@@ -252,7 +243,7 @@ void parse_response(request_t* request, char* buffer){
 void create_response(int status_code, content_type_t content_type, request_method_t method, char* buffer, char* body){
   char* http_version = "HTTP/1.1 ";
   strcat(buffer, http_version);// Ex: HTTP/1.1
-  char* status_code_str = malloc(3);
+  char* status_code_str = (char* )malloc(3);
   sprintf(status_code_str,"%d ", status_code);
   strcat(buffer, status_code_str); // Ex: 200
   strcat(buffer, get_status_code_message(status_code)); // Ex: OK
@@ -263,64 +254,68 @@ void create_response(int status_code, content_type_t content_type, request_metho
 
 }
 int main(){
-  int port = 6900;
-  int server_fd, new_socket;
-  struct sockaddr_in server_addr;
-  int opt = 1;
-  int addrelen = sizeof(server_addr);
-  char buffer[1024] = {0};
-  char *header_prefix = "HTTP/1.1 200 OK\nContent-Type: text/html\n\n";
+  char* test = (char*)malloc(100);
+  fgets(test, 100, stdin);
+  printf("hash of test is: 0x%x \n",dt_hash(test, strlen(test)));
+  free(test);
+//   int port = 6900;
+//   int server_fd, new_socket;
+//   struct sockaddr_in server_addr;
+//   int opt = 1;
+//   int addrelen = sizeof(server_addr);
+//   char buffer[1024] = {0};
+//   char *header_prefix = "HTTP/1.1 200 OK\nContent-Type: text/html\n\n";
+// 
+//   if((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0){
+//     perror("socket failed");
+//     exit(EXIT_FAILURE);
+//   }
+//   
+//   if(setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))){
+//     perror("setsockopt");
+//     exit(EXIT_FAILURE);
+//   }
+// 
+//   server_addr.sin_family = AF_INET;
+//   server_addr.sin_addr.s_addr = INADDR_ANY;
+//   server_addr.sin_port = htons(port);
+// 
+//   if(bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0){
+//     perror("bind failed");
+//     exit(EXIT_FAILURE);
+//   }
+// 
+//   if(listen(server_fd, 3) < 0){
+//     perror("listen");
+//     exit(EXIT_FAILURE);
+//   }
 
-  if((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0){
-    perror("socket failed");
-    exit(EXIT_FAILURE);
-  }
-  
-  if(setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))){
-    perror("setsockopt");
-    exit(EXIT_FAILURE);
-  }
 
-  server_addr.sin_family = AF_INET;
-  server_addr.sin_addr.s_addr = INADDR_ANY;
-  server_addr.sin_port = htons(port);
-
-  if(bind(server_fd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0){
-    perror("bind failed");
-    exit(EXIT_FAILURE);
-  }
-
-  if(listen(server_fd, 3) < 0){
-    perror("listen");
-    exit(EXIT_FAILURE);
-  }
-
-
-  while (1) {
-    printf("Waitin' for some peeps...\n");
-
-    if((new_socket = accept(server_fd, (struct sockaddr *)&server_addr, (socklen_t*)&addrelen)) < 0){
-      perror("accept");
-      exit(EXIT_FAILURE);
-    }
-
-    read(new_socket, buffer, 1024);
-
-    char* response_buffer = (char*)calloc(1024, sizeof(char));
-
-    strcat(response_buffer, header_prefix);
-
-    request_t* request = (request_t*)malloc(sizeof(request_t));
-    parse_response(request,buffer);
-
-    send(new_socket, response_buffer, strlen(response_buffer), 0);
-
-    printf("Sent!\n %s", response_buffer);
-
-    free(response_buffer);
-    free(request);
-    close(new_socket);
-  }
+//   while (1) {
+//     printf("Waitin' for some peeps...\n");
+// 
+//     if((new_socket = accept(server_fd, (struct sockaddr *)&server_addr, (socklen_t*)&addrelen)) < 0){
+//       perror("accept");
+//       exit(EXIT_FAILURE);
+//     }
+// 
+//     read(new_socket, buffer, 1024);
+// 
+//     char* response_buffer = (char*)calloc(1024, sizeof(char));
+// 
+//     strcat(response_buffer, header_prefix);
+// 
+//     request_t* request = (request_t*)malloc(sizeof(request_t));
+//     parse_response(request,buffer);
+// 
+//     send(new_socket, response_buffer, strlen(response_buffer), 0);
+// 
+//     printf("Sent!\n %s", response_buffer);
+// 
+//     free(response_buffer);
+//     free(request);
+//     close(new_socket);
+//   }
 
   return 0;
 

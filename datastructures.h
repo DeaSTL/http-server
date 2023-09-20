@@ -24,7 +24,7 @@ typedef struct dt_hashmap_s{
   unsigned int element_size;
 } dt_hashmap;
 
-
+int dt_hash(void* key, unsigned int element_size);
 
 void dt_hashmap_create(dt_hashmap* hashmap, unsigned int element_size);
 
